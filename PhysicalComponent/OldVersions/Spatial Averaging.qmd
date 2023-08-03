@@ -1,0 +1,46 @@
+---
+title: "Spatial averaging"
+format: html
+editor: visual
+author: Josh 
+---
+
+## Custom function & loop - spatial averaging
+
+HeatwaveR requires a specific input format to analyse data - a temperature time series dataframe with only two vectors - temperature and date.
+
+Because AODN data is 3 dimensional - a matrix of SST for each recording - we need to average the SST in the given area into one single point average.
+
+This removes the specific features of the area - eddies etc., but allows us to quantify the heat of that part of the EAC over time.
+
+To do this, I wrote a function and a for loop which average each recording's SST matrix into a single mean value, which is then assigned to a new dataframe. This new df is what we can feed into HeatwaveR to obtain our first round of analyses.
+
+The code is still experimental.
+
+```{r}
+#The function is called spatav (Spatial Average) and is designed to work with dataframes
+spatav_exp2 <- function(df) {
+  col_means = sapply(df, mean) #applying mean function to all columns in df
+  point_mean = mean(col_means) #applying mean function to all column means
+  return(point_mean)
+}
+```
+
+For loop
+
+```{r}
+#time_series is the 3D timeseries to be fed to the loop
+
+#output dataframe (for HeatwaveR)
+results <- data.frame()
+
+for (i in seq_along(time_series)) {
+  current_result <- spatav_exp2(time_series[[i]]) #spatav used on each df
+  results <- rbind(results, current_result) #binding results to new df
+}
+
+#Should return usable object :)
+```
+
+```{#return point mean}
+```

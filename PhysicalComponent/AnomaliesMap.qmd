@@ -1,0 +1,114 @@
+---
+title: "AnomaliesMap"
+format: html
+editor: visual
+---
+
+```{r}
+library(ncdf4)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(na.tools)
+library(ggOceanMaps)
+library(reshape2)
+install.packages("viridis")
+library(viridis)
+```
+
+Create heatmap with average temperature (Climatology)
+
+```{r}
+data <- nc_open("IMOS_aggregation_20230725T013251Z.nc")
+
+lon <- ncvar_get(data, "lon")
+lat <- ncvar_get(data, "lat")
+temp <- ncvar_get(data, "sea_surface_temperature")
+time <- ncvar_get(data, "time")
+
+temp <- temp - 273.15
+
+time_units <- ncatt_get(data, "time", "units")$value
+time_origin <- as.POSIXct("1981-01-01", tz = "UTC")
+time_dates <- as.POSIXct(time_origin + time, tz = "UTC")
+
+# Step 3: Convert time values from seconds to dates
+start_date <- as.Date("1991-01-01")
+time_dates <- start_date + time / (60 * 60 * 24)  # Convert seconds to days
+
+# Step 4: Calculate the average for each grid cell within the specified time range and for austral summer months
+start_year <- 1993
+end_year <- 2007
+time_filter <- time_dates >= as.Date(paste0(start_year, "-12-01")) &
+              time_dates <= as.Date(paste0(end_year, "-02-28"))
+
+austral_summer_filter <- format(time_dates, "%m") %in% c("12", "01", "02", "03", "04", "05", "06", "07", "08")
+combined_filter <- time_filter & austral_summer_filter
+
+dim(temp)
+
+# Calculate the average temperature for each grid cell
+average_temperature <- temp[,,combined_filter] %>%
+  apply(c(1, 2), mean, na.rm = TRUE)
+
+#2021-2022 summer
+start_date_summer_2021 <- as.Date("2021-12-01")
+end_date_summer_2022 <- as.Date("2022-08-28")
+indices_summer_2021_2022 <- which(time_dates >= start_date_summer_2021 & time_dates <= end_date_summer_2022)
+
+temperature_data_summer <- temp[, , indices_summer_2021_2022] %>%
+  apply(c(1, 2), mean, na.rm = TRUE)
+
+lat_rep <- replicate(lat, n = 250)
+lon_rep <- replicate(lon, n = 200)
+
+dim(lat_rep)
+dim(lon_rep)
+dim(average_temperature)
+
+df <- data.frame(LON = c(lon_rep), LAT = c(lat_rep), TEMP = c(average_temperature))
+
+clean_df <- drop_na(df)
+
+ggplot(clean_df) +
+  geom_tile(aes(x = LON, y = LAT, fill = TEMP)) +
+  scale_fill_gradient(low = "green", high = "purple") +
+  scale_fill_viridis(option = "inferno") +
+  theme_minimal()
+
+ANOMALY <- temperature_data_summer - average_temperature
+
+ANOMDF <- data.frame(LON = c(lon_rep), LAT = c(lat_rep), TEMP = c(ANOMALY))
+
+clean_ANOMDF <- drop_na(ANOMDF)
+
+ggplot(clean_ANOMDF) +
+  geom_tile(aes(x = LON, y = LAT, fill = TEMP)) +
+  scale_fill_gradient(low = "green", high = "purple") +
+  scale_fill_viridis(option = "inferno") +
+  theme_minimal()
+```
+
+old code
+
+```{r}
+summer_indices <- which(format(time_dates, "%m") %in% c("12", "01", "02"))
+
+summer_temperature <- temp[,,summer_indices]
+
+summer_temperature_mean <- apply(temp[,,summer_indices], mean, na.rm = T)
+
+baseline_temperature <- apply(temp[,,summer_indices], c(1,2), mean, na.rm = T)
+
+baseline_temperature_rep <- array(baseline_temperature, dim = dim(summer_temperature))
+
+summer_anomalies <- summer_temperature - baseline_temperature_rep
+
+ggplot(summer_anomalies) + 
+  geom_tile()
+
+lon_lat_grid <- expand.grid(lon = as.vector(lon), lat = as.vector(lat))
+anomaly_df <- data.frame(lon = lon_lat_grid$lon,
+                         lat = lon_lat_grid$lat,
+                         anomalies = c(summer_anomalies))
+```

@@ -1,0 +1,114 @@
+---
+title: "Chemical Analysis"
+author: "Man"
+format: html
+---
+
+## Running Code
+
+Load packages
+
+```{r}
+library('tidyverse')
+library('ncdf4')
+library('heatwaveR')
+library('ggplot2')
+library('dplyr')
+```
+
+Load data downloaded from AODN
+
+```{r}
+data <- read.csv("IMOS_-_Combined_Biogeochemical_parameters_(reference_stations)-NRS_combined_biogeochemical_parameters.csv")
+
+```
+
+Filter data by locations
+
+```{r}
+Maria <- data[data$StationName == 'Maria Island', ]
+```
+
+We will focus on NRS data only, as coastal stations only measure the surface concentration of silicates. - Plot a line plot that records the concentration of nitrate wrt time on a given depth.
+- Coordinates of Maria Island NRS: Lat: -42.5 Lon: 148.4
+
+Separate the data by depth:
+
+```{r}
+Maria.list10 <- Maria[Maria$SampleDepth_m == 10, ]
+Maria.list20 <- Maria[Maria$SampleDepth_m == 20, ]
+Maria.list30 <- Maria[Maria$SampleDepth_m == 30, ]
+Maria.list40 <- Maria[Maria$SampleDepth_m == 40, ]
+Maria.list50 <- Maria[Maria$SampleDepth_m == 50, ]
+Maria.list60 <- Maria[Maria$SampleDepth_m == 60, ]
+Maria.list75 <- Maria[Maria$SampleDepth_m == 75, ]
+Maria.list80 <- Maria[Maria$SampleDepth_m >= 80, ]
+
+for (SampleDepth_m in Maria.list80) {
+  Maria.list80$SampleDepth_m <- 80
+}
+
+Maria.total <- rbind(Maria.list10, Maria.list20, Maria.list30, Maria.list40, Maria.list50, Maria.list60, Maria.list75, Maria.list80)
+
+Maria.total$Date <- as.Date(Maria.total$TripDate_UTC)
+```
+
+Setting up some Parameters for all the plots:
+
+```{r}
+# Overall Period of Plots
+start_date <- as.Date("2018-09-01")
+end_date <- as.Date("2023-01-01")
+# Highlight periods for the two heatwave events
+MHWstart<- as.Date("2022-01-16")
+MHWend <- as.Date("2022-08-16")
+MHWPeak1 <- as.Date("2022-05-23")
+MHW2start <- as.Date("2018-12-23")
+MHW2end <- as.Date("2019-02-18")
+MHWPeak2 <- as.Date("2019-01-18")
+
+#Special parameters for plots.
+x_scale <- "1 year"
+
+
+```
+
+Then we plot the data
+
+This is the Chlorophyll A plot, since there are insufficient measurements beyond 20m, we are only plotting 20m:
+```{r}
+Maria.list20$Date <- as.Date(Maria.list20$TripDate_UTC)
+
+ChlAplot <- ggplot() +
+  geom_rect(data = Maria.total, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Maria.total, aes(xmin = MHW2start, xmax = MHW2end, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHWPeak2, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.list20, aes(x = Date, y = CphlA_mgm3, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) +
+  labs(title = expression("Chlorophyll a per Volume at Maria Island NRS at 20m"), y = "Chlorophyll a (mg/m"^3~")") +
+  theme(plot.title = element_text(hjust = 0.5))
+ggsave(filename = "ChlAPlot.png", plot = ChlAplot, width = 6, height = 4, dpi = 300)
+print(ChlAplot)
+
+```
+
+This is the Salinity plot:
+```{r}
+Salplot <- ggplot() +
+  geom_rect(data = Maria.total, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Maria.total, aes(xmin = MHW2start, xmax = MHW2end, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHWPeak2, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.total, aes(x = Date, y = Salinity, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) + 
+  scale_y_continuous(limits = c(34, 36)) +
+  labs(title = "Salinity at Maria Island NRS by Depth (m)", y = "Salinity (Parts Per Thousand)") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~SampleDepth_m, nrow = 5, ncol = 2)
+ggsave(filename = "SalinityPlot.png", plot = Salplot, width = 6, height = 4, dpi = 300)
+print(Salplot)
+
+```

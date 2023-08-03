@@ -1,0 +1,68 @@
+---
+title: "Temporal average"
+format: html
+editor: visual
+---
+
+## Temporal averaging
+
+Creating anomaly maps and representing data from a period of time longer than a single day requires temporal averaging. This QMD will be for experimentation with the goal of establishing a repeatable and exportable method for creating temporal average MAPS.
+
+```{r}
+#packages
+install.packages("ggOceanMaps")
+library(ncdf4)
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(na.tools)
+library(ggOceanMaps)
+```
+
+```{r}
+#reading & retrieving
+data <- nc_open("C:/Users/z5493084/Desktop/9041Proj/data/IMOS_aggregation_20230715T063946Z.nc")
+
+temp <- ncvar_get(data, "sea_surface_temperature")
+#K -> C
+temp <- temp - 272.15
+
+lat <- ncvar_get(data, "lat")
+lon <- ncvar_get(data, "lon")
+date <- ncvar_get(data, varid =  "time")
+
+#converting dates from seconds to days
+date <- date %>%
+  as.POSIXct(origin = "1981-01-01", tz = "UTC")
+date <- date %>%
+  as.Date()
+```
+
+```{r}
+#create dataframe
+
+lon.r <- replicate(lon, n = 800)
+lon.r <- t(lon.r)
+lon.rr <- replicate(lon.r, n = 187)
+
+lat.r <- replicate(lat, n = 750)
+lat.r <- t(lat.r)
+lat.rr <- replicate(lat.r, n = 187)
+
+dim(lat.rr)
+dim(lon.rr)
+dim(temp)
+
+df <- data.frame(longitude = c(lon.rr), latitude = c(lat.rr), temperature = c(temp))
+
+#temporal average
+avg_temp <- aggregate(temperature ~ latitude + longitude,
+                      data = df, FUN = mean)
+#mapping
+dt <- data.frame(lon = c(140, 140, 170, 170), lat = c(-25, -50, -50, -25))
+
+basemap(data = dt, bathymetry = F) +
+  geom_point(data = avg_temp, aes(x = longitude, y = latitude, color = temperature), size = 3) +
+  scale_color_gradient(low = "blue", high = "red", na.value = "grey50", name = "Average Temperature") +
+  theme_void()   
+```

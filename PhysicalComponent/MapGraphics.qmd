@@ -1,0 +1,46 @@
+---
+title: "Map Graphics"
+author: "Man"
+format: html
+---
+
+```{r}
+library('ggplot2')
+```
+
+```{r}
+data <- data.frame(
+#  Location = c("NSW Coast", "Port Hacking", "Tasman Sea", "Maria Island NRS"),
+  longitude = c(148.4),
+  latitude = c(-42.5)
+)
+
+world_map <- map_data("world")
+maplot <- ggplot() +
+  geom_polygon(data = world_map, aes(x = long, y = lat, group = group), fill = "lightgray") +
+  geom_rect(data = data, aes(xmin = 150, xmax = 154.6, ymin = -36.5, ymax = -32), fill = "green", alpha = 0.5) +
+  geom_rect(data = data, aes(xmin = 151, xmax = 156, ymin = -34.5, ymax = -39), fill = "red", alpha = 0.5) +
+  geom_rect(data = data, aes(xmin = 148, xmax = 153, ymin = -42, ymax = -46), fill = "blue", alpha = 0.5) +
+  geom_point(data = data, aes(x = longitude, y = latitude), size = 3) +
+  labs(title = "Area of Study", x = "Longitude°", y = "Latitude°") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_continuous(limits = c(100, 160)) +
+  scale_y_continuous(limits = c(-48, -5)) +
+  # guides(color = guide_legend(title = "Locations")) +
+  theme_minimal()
+
+legend_data <- data.frame(
+   x = c(148.4, 152.3, 153.5, 150.5),   # Adjust the x, y coordinates to position the legend points
+   y = c(-42.5, -34.25, -36.75, -44),
+   Location = c("Maria Island NRS", "Port Hacking", "NSW Coast", "Tasman Sea"),
+   LocCol = c("black", "green", "red", "blue")
+ )
+
+maplot <- maplot + geom_point(data = legend_data, aes(x, y, color = Location), size = 1, alpha = 0.5)
+maplot <- maplot + scale_color_manual(values = c("Maria Island NRS" = "black", "Port Hacking" = "green", "NSW Coast" = "red", "Tasman Sea" = "blue"))
+print(maplot)
+
+ggsave("map_plot.png", plot = maplot, width = 1920, height = 1080, units = "px", dpi = 300, bg = "white")
+```
+
+

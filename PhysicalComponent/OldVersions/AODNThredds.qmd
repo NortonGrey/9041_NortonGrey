@@ -1,0 +1,52 @@
+---
+title: "DataExplore"
+format: html
+editor: visual
+Author: Norton Grey
+---
+
+## Set-Up
+
+Packages and function to load Thredds data
+
+```{r}
+rm(list = ls())
+install.packages('ncdf4')
+library(ncdf4)
+
+# You need to download the IMOS code library from AODN, and then trace the path to the ncParse.r file
+# Download from here
+# https://github.com/aodn/imos-user-code-library/archive/master.zip
+
+# Change source to fit your own computer path
+source('C:/Users/Norto/Desktop/BEES9041/ProjectActual/ProjectActual/ncParse.r')
+```
+
+## Link to Thredds
+
+Example dataset from IMOS
+
+-   This code is from the demo folder within the IMOS code library
+
+-   For SRS-SST L3S 1 day (what we're trying to use)
+
+-   Trying the link on my laptop won't load data (after 10 minutes)
+
+```{r}
+file <- 'https://thredds.aodn.org.au/thredds/dodsC/IMOS/ANMN/NRS/NRSMAI/aggregated_products/IMOS_ANMN-NRS_STZ_19441015T120000Z_NRSMAI_FV02_NRSMAI-long-timeseries-interpolated_END-20141227T120000Z_C-20160606T225011Z.nc'
+dataset <- ncParse( file, parserOption = 'all', variables = 'sea_surface_temperature') # Only harvest the sea surface temperature variable
+```
+
+Trying to link to our own Thredds dataset + code explain
+
+```{r}
+# Create object 'file_URL' using link to pre-selected Thredds folder
+
+file_URL <- 'https://thredds.aodn.org.au/thredds/dodsC/UNSW/NRS_climatology/Temperature_DataProducts/PH100/Aggregated/PH100_TEMP_1953-2020_aggregated_v1.nc'
+
+# File name meaning -> UNSW/Port Hacking 100m depth/National Reference Stations Climatology/Temperature/Aggregated data sources/Port Hacking 100m depth/PH100 temp 1953 to 2020
+
+# parserOption 'all' specifies just 'metadata' or 'metadata and regular data'
+# variables specifies if you just want it to download one variable e.g. SST
+dataset <- ncParse(file_URL, parserOption = 'all')
+```

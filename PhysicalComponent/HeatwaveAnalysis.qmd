@@ -1,0 +1,322 @@
+---
+title: "10YrExplore"
+format: html
+editor: visual
+author: Norton & Josh
+---
+
+## Load packages
+
+```{r}
+library(ncdf4)
+library(tidyverse)
+library(viridis)
+library(heatwaveR)
+library(na.tools)
+library(zoo)
+```
+
+## Load data
+
+```{r}
+rm(list = ls())
+
+SST92_23 <- nc_open('C:/Users/z5493084/Desktop/9041Proj/data/IMOS_aggregation_20230727T102758Z.nc')
+#30 year dataset
+```
+
+## Prepare data
+
+```{r}
+TEMP <- ncvar_get(SST92_23, varid = 'sea_surface_temperature') #get temp variable
+
+#reading temp data into a list
+
+num_obs <- dim(SST92_23$dim$time$vals)
+
+data.list <- vector("list", num_obs)
+
+for (i in 1:num_obs) {
+  data <- data.frame(temperature = TEMP[ , ,i])
+  data.list[[i]] <- data
+}
+```
+
+## Get spatially averaged timeseries
+
+```{r}
+#custom 'spatav' function which turns dataframes into point means
+spatav_exp3 <- function(df) {
+  col_means = sapply(df, function(x) mean(x, na.rm = T))
+  point_mean = mean(col_means)
+  return(point_mean)
+}
+
+#spatially averaging into 'results' df
+
+results <- data.frame()
+
+for (i in seq_along(data.list)) {
+  current_results <- spatav_exp3(data.list[[i]]) 
+  results <- rbind(results, current_results)
+}
+
+#interpolation of NAs
+
+#custom 'interp' function which interpolates based off previous & next values
+interp <- function(x) {
+  na_indices <- which(is.nan(x))
+for (i in na_indices) {
+  left_val <- NA
+  right_val <- NA
+  
+  if (i > 1) {
+    left_val <- x[i - 1]
+  }
+  if (i < length(x)) {
+    right_val <- x[i + 1]
+    }
+  x[i] <- mean(c(left_val, right_val), na.rm = T)
+}
+  return(x)
+  }
+
+#interpolating
+sst.interp <- interp(results$NaN.)
+
+#reading into df
+sst.interp <- data.frame(sst.interp)
+```
+
+## Add dates
+
+```{r}
+date_string <- data.frame(SST92_23$dim$time$vals)
+
+date.fin <- as.numeric(date_string$SST92_23.dim.time.vals)
+date.POSIX <- as.POSIXct(date.fin, origin = "1981-1-1", tz = "GMT")
+
+t <- data.frame(date.POSIX)
+
+#this is the final product - the df to be read into the 'ts2clm' function to begin analysis with heatwaveR
+sst_kelvin <- data.frame(t = t$date.POSIX, temp = sst.interp$sst.interp)
+
+# changed sst to sst_kelvin so it could be differentiated when converting
+
+# adding back code to convert the data to just y/m/d cause that got deleted in previous
+
+sst_kelvin$t <- as.Date(sst_kelvin$t, format = "y%/m%/d%")
+```
+
+## Convert Kelvin to Celcius
+
+```{r}
+sst <- sst_kelvin - 273.15
+```
+
+## Rolling Average
+
+```{r}
+#30 day rolling average
+
+window30 <- 30
+
+rolling_average30 <- lapply(sst, function(x) rollmean(x,
+                                                     k = window30,
+                                                     align = "right",
+                                                     fill = NA))
+
+rollavg30 <- data.frame(rolling_average30$temp) 
+
+rollavg30.sst <- data.frame(t = t$date.POSIX, temp = rollavg30$rolling_average30.temp)
+
+rollavg30.sst$t <- as.Date(rollavg30.sst$t)
+
+```
+
+## HeatwaveR
+
+```{r}
+ts30 <- ts2clm(rollavg30.sst, climatologyPeriod = c("1992-03-21", "2007-03-21"))
+
+mhw30 <- detect_event(ts30)
+
+#events
+rm(SEMetrics)
+
+SydMetrics <- mhw30$event %>% 
+  ungroup() %>%
+  select(event_no, duration, date_start, date_peak, intensity_max, intensity_cumulative) %>% 
+  arrange(-intensity_cumulative) %>% 
+  head(20)
+```
+
+## Visualisation
+
+```{r}
+#visualisation
+
+event_line(mhw30, spread = 180, metric = "intensity_cumulative",
+           start_date = "2021-06-30", end_date = "2022-06-30")
+
+lolli_plot(mhw30, metric = 'intensity_max')
+
+# Advanced graphing
+mhw2022 <- mhw30$climatology %>%
+  slice(10820:11185)
+
+# Destroyer of Kelp example
+ggplot(mhw2022, aes(x = t, y = temp, y2 = thresh)) +
+  geom_flame() +
+  geom_text(aes(x = as.Date("2021-12-25"), y = 16, label = "the Destroyer\nof Kelps"))
+
+# Hobday et al. 2016 replication
+mhw_top <- mhw2022 %>%
+  slice(175:440)
+
+ggplot(data = mhw2022, aes(x = t)) +
+  geom_flame(aes(y = temp, y2 = thresh, fill = "all"), show.legend = T) +
+  geom_flame(data = mhw_top, aes(y = temp, y2 = thresh, fill = "top"),  show.legend = T) +
+  geom_line(aes(y = temp, colour = "temp")) +
+  geom_line(aes(y = thresh, colour = "thresh"), size = 1.0) +
+  geom_line(aes(y = seas, colour = "seas"), size = 1.2) +
+  scale_colour_manual(name = "Line Colour",
+                      values = c("temp" = "black", 
+                                 "thresh" =  "forestgreen", 
+                                 "seas" = "grey80")) +
+  scale_fill_manual(name = "Event Colour", 
+                    values = c("all" = "salmon", 
+                               "top" = "red")) +
+  scale_x_date(date_labels = "%b %Y") +
+  guides(colour = guide_legend(override.aes = list(fill = NA))) +
+  labs(y = expression(paste("Temperature [", degree, "C]")), x = NULL)
+```
+
+## Categories
+
+```{r}
+MHW_cat <- category(mhw30, S = TRUE, name = "Syd")
+tail(MHW_cat)
+
+event_line(mhw30, spread = 180, start_date = "2021-11-01", end_date = "2022-06-30", category = TRUE)
+
+# Advanced category figures
+# Create category breaks and select slice of data.frame
+clim_cat <- mhw30$clim %>%
+  dplyr::mutate(diff = thresh - seas,
+                thresh_2x = thresh + diff,
+                thresh_3x = thresh_2x + diff,
+                thresh_4x = thresh_3x + diff) %>% 
+  dplyr::slice(10820:11185)
+
+# Set line colours
+lineColCat <- c(
+  "Temperature" = "black",
+  "Climatology" = "gray20",
+  "Threshold" = "darkgreen",
+  "2x Threshold" = "darkgreen",
+  "3x Threshold" = "darkgreen",
+  "4x Threshold" = "darkgreen"
+  )
+
+# Set category fill colours
+fillColCat <- c(
+  "Moderate" = "#ffc866",
+  "Strong" = "#ff6900",
+  "Severe" = "#9e0000",
+  "Extreme" = "#2d0000"
+  )
+
+ggplot(data = clim_cat, aes(x = t, y = temp)) +
+  geom_flame(aes(y2 = thresh, fill = "Moderate")) +
+  geom_flame(aes(y2 = thresh_2x, fill = "Strong")) +
+  geom_flame(aes(y2 = thresh_3x, fill = "Severe")) +
+  geom_flame(aes(y2 = thresh_4x, fill = "Extreme")) +
+  geom_line(aes(y = thresh_2x, col = "2x Threshold"), size = 0.7, linetype = "dashed") +
+  geom_line(aes(y = thresh_3x, col = "3x Threshold"), size = 0.7, linetype = "dotdash") +
+  geom_line(aes(y = thresh_4x, col = "4x Threshold"), size = 0.7, linetype = "dotted") +
+  geom_line(aes(y = seas, col = "Climatology"), size = 0.7) +
+  geom_line(aes(y = thresh, col = "Threshold"), size = 0.7) +
+  geom_line(aes(y = temp, col = "Temperature"), size = 0.6) +
+  scale_colour_manual(name = NULL, values = lineColCat,
+                      breaks = c("Temperature", "Climatology", "Threshold",
+                                 "2x Threshold", "3x Threshold", "4x Threshold")) +
+  scale_fill_manual(name = NULL, values = fillColCat, guide = FALSE) +
+  scale_x_date(date_labels = "%b %Y") +
+  guides(colour = guide_legend(override.aes = list(linetype = c("solid", "solid", "solid",
+                                                                "dashed", "dotdash", "dotted"),
+                                                   size = c(0.6, 0.7, 0.7, 0.7, 0.7, 0.7)))) +
+  labs(y = "Temperature [°C]", x = NULL)
+```
+
+## Anomaly Chart
+
+```{r}
+clim_cat_Anomaly <- mhw30$clim %>%
+  dplyr::mutate(diff = thresh - seas,
+                thresh_2x = thresh + diff,
+                thresh_3x = thresh_2x + diff,
+                thresh_4x = thresh_3x + diff) %>% 
+  dplyr::slice(8000:11244)
+
+Anomaly <- data.frame(Time = clim_cat_Anomaly$t, Anomaly = clim_cat_Anomaly$temp - clim_cat_Anomaly$seas)
+```
+
+Didn't work, stealing Man Lim's code
+
+```{r}
+start_date <- as.Date("2014-02-13")
+end_date <- as.Date("2023-01-01")
+# Highlight periods for the two heatwave events
+MHWstart<- as.Date("2015-10-11")
+MHWend <- as.Date("2015-12-04")
+MHWPeak1 <- as.Date("2015-11-01")
+MHW2start <- as.Date("2018-04-10")
+MHW2end <- as.Date("2018-05-27")
+MHWPeak2 <- as.Date("2018-04-27")
+MHW3start <- as.Date("2016-02-03")
+MHW3end <- as.Date("2016-07-20")
+MHW3Peak <- as.Date("2016-03-19")
+MHW4Start <- as.Date("2016-07-25")
+MHW4End <- as.Date("2016-11-10")
+MHW4Peak <- as.Date("2016-10-19")
+MHW5Start <- as.Date("2022-04-25")
+MHW5End <- as.Date("2022-06-14")
+MHW5Peak <- as.Date("2022-05-30")
+MHW6Start <- as.Date("2022-01-01")
+MHW6End <- as.Date("2022-06-14")
+MHW6Peak <- as.Date("2022-02-15")
+ 
+AnomalyPlot <- ggplot() +
+  geom_rect(data = Anomaly, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Anomaly, aes(xmin = MHW2start, xmax = MHW2end, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Anomaly, aes(xmin = MHW3start, xmax = MHW3end, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Anomaly, aes(xmin = MHW4Start, xmax = MHW4End, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Anomaly, aes(xmin = MHW5Start, xmax = MHW5End, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_rect(data = Anomaly, aes(xmin = MHW6Start, xmax = MHW6End, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHWPeak2, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHW3Peak, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHW4Peak, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHW5Peak, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = MHW6Peak, linetype = "dashed", color = "red") +
+  geom_line(data = Anomaly, aes(x = Time, y = Anomaly, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_y_continuous(limits = c(-1, 5))
+
+
+print(AnomalyPlot)
+ggsave("SydAnomalyTimeseries.png", width = 20, height = 5, units = "cm")
+
+
+```
+
+## Exporting
+
+Dataset
+
+```{r}
+write.csv(rollavg30.sst, file = "SST30AvgTas.csv", col.names = TRUE)
+write.csv(sst, file = "SSTTas.csv")
+
+```

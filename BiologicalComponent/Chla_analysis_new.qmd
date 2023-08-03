@@ -1,0 +1,262 @@
+---
+title: "Chlorophyll a analysis"
+format: html
+editor: visual
+author: Jonathan & Olivier
+---
+
+##Install packages
+
+```{r}
+install.packages("dplyr")
+install.packages("lubridate")
+install.packages("ggplot2")
+install.packages("tidync")
+install.packages("doParallel")
+install.packages("rerddap")
+install.packages("plyr")
+install.packages("ncdf4")
+install.packages("tidyverse")
+install.packages("viridis")
+install.packages("heatwaveR")
+install.packages("na.tools")
+install.packages("zoo")
+install.packages("gganimate")
+install.packages("knitr")
+
+```
+
+##Load packages
+
+```{r}
+library("dplyr")
+library("lubridate")
+library("ggplot2")
+library("tidync")
+library("doParallel")
+library("rerddap")
+library("plyr")
+library("ncdf4")
+library("tidyverse")
+library("viridis")
+library("heatwaveR")
+library("na.tools")
+library("zoo")
+library("gganimate")
+library("knitr")
+```
+
+##Load dataset
+
+```{r}
+rm(list = ls())
+filename = paste0('IMOS_aggregation_20230725T235548Z.nc')
+nc <- nc_open("IMOS_aggregation_20230725T235548Z.nc")
+```
+
+##Prepare data
+
+```{r}
+chl <- ncvar_get(nc, varid = 'chl_oc3') #get chla variable
+
+#reading chla data into a list
+num_obs <- dim(nc$dim$time$vals)
+
+data.list <- vector("list", num_obs)
+
+for (i in 1:num_obs) {
+  data <- data.frame(chlorophyll = chl[ , ,i])
+  data.list[[i]] <- data
+}
+```
+
+##Get spatially averaged timeseries
+
+```{r}
+#custom 'spatav' function which turns dataframes into point means
+spatav_exp3 <- function(df) {
+  col_means = sapply(df, function(x) mean(x, na.rm = T))
+  point_mean = mean(col_means)
+  return(point_mean)
+}
+
+#spatially averaging into 'results' df
+results <- data.frame()
+
+for (i in seq_along(data.list)) {
+  current_results <- spatav_exp3(data.list[[i]]) 
+  results <- rbind(results, current_results)
+}
+
+#interpolation of NAs
+
+#custom 'interp' function which interpolates based off previous & next values
+interp <- function(x) {
+  na_indices <- which(is.nan(x))
+  for (i in na_indices) {
+    left_val <- NA
+    right_val <- NA
+    
+    if (i > 1) {
+      left_val <- x[i - 1]
+    }
+    if (i < length(x)) {
+      right_val <- x[i + 1]
+    }
+    x[i] <- mean(c(left_val, right_val), na.rm = T)
+  }
+  return(x)
+}
+
+#interpolating
+chl.interp <- interp(results$X0.376462923946287)
+chl.interp <- data.frame(chl.interp)
+```
+
+##Add dates
+
+```{r}
+date_string <- data.frame(nc$dim$time$vals)
+
+date.fin <- as.Date(date_string$nc.dim.time.vals)
+date.POSIX <- as.POSIXct(date.fin, origin = "1990-1-1", tz = "GMT")
+
+
+t <- data.frame(date.fin)
+
+
+years_to_add = 20
+
+
+chla <- data.frame(t = t$date.fin, Chla = chl.interp$chl.interp)
+chla$t <- as.POSIXct(chla$t, format = "y%/m%/d%")
+
+chla$t <- chla$t + years(years_to_add)
+```
+
+##Zoom on summer 21/22
+
+```{r}
+# Convert the 'date.fin' column to Date format
+chla$t <- as.Date(chla$t)
+
+# Subset the data for the desired time range (December 2021 to February 2022)
+start_date <- as.Date("2021-12-01")
+end_date <- as.Date("2022-02-28")
+chla_subset <- subset(chla, t >= start_date & t <= end_date)
+
+# Plot the data using ggplot2
+library(ggplot2)
+
+ggplot(chla_subset, aes(x = t, y = Chla)) +
+  geom_line() +
+  labs(title = "Chlorophyll Concentration",
+       x = "Date: 2021/22", y = "Chla") +
+  theme_minimal()
+```
+
+##Chlorophyll a baseline for summer months
+
+```{r}
+# Convert the 'date.fin' column to Date format
+chla$t <- as.Date(chla$t)
+
+# Subset the data for the desired time range (December to February)
+subsetDF_chla <- chla %>%
+  filter(month(t) %in% c(12, 1, 2))
+
+# Extract day and month from the 't' column
+subsetDF_chla <- subsetDF_chla %>%
+  mutate(day = day(t), month = month(t))
+
+
+# Create an empty dataframe to store the averages
+averages_df <- data.frame(Day_Month = character(), Average_Chla = numeric(), stringsAsFactors = FALSE)
+
+# Loop through unique day and month combinations
+for (day_month_combo in unique(paste(subsetDF_chla$day, subsetDF_chla$month, sep = "-"))) {
+  # Extract day and month from the current combination
+  day_month <- strsplit(day_month_combo, "-")[[1]]
+  day <- as.integer(day_month[1])
+  month <- as.integer(day_month[2])
+  
+  # Subset the data for the current day and month
+  subset_data <- subsetDF_chla %>%
+    filter(day == day_month[1], month == day_month[2])
+  
+  # Calculate the average 'Chla' for the current group
+  avg_chla <- mean(subset_data$Chla, na.rm = TRUE)
+  
+  # Create a new row as a single-row dataframe with the calculated average
+  new_row <- data.frame(
+    Day_Month = paste(day, month, sep = "-"),  # Combine day and month into one column
+    Average_Chla = avg_chla
+  )
+  
+  # Append the new row to the existing dataframe
+  averages_df <- rbind(averages_df, new_row)
+}
+
+
+# Convert Day_Month to factor and manually set the order of levels
+averages_df$Day_Month <- factor(averages_df$Day_Month,
+                                levels = c(paste(1:31, 12:12, sep = "-"),
+                                           paste(1:31, 1:1, sep = "-"),
+                                           paste(1:29, 2:2, sep = "-")))
+
+# Create the ggplot with vertical labels
+ggplot(averages_df, aes(x = Day_Month, y = Average_Chla, group = 1)) +
+  geom_line(colour = "chartreuse4") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+##Chlorophyll anomaly
+
+```{r}
+#take the Chla data from chla_subset, remove the year and swap month-day to day-month
+# Convert the 't' column to Date type
+chla_subset$t <- as.Date(chla_subset$t)
+
+# Extract month and day from the 't' column, ignoring the year
+chla_subset$t <- format(chla_subset$t, format = "%m-%d")
+
+# Split the 't' column into month and day parts
+date_parts <- strsplit(chla_subset$t, "-")
+
+# Swap the elements to get the day-month format
+day_month_format <- sapply(date_parts, function(x) paste(rev(x), collapse = "-"))
+
+# Update the 't' column in 'chla_subset'
+chla_subset$t <- day_month_format
+
+#rename columns in "averages_df"
+colnames(averages_df) <- c("t", "Chla")
+
+# Remove the 91st row from the averages_df data frame
+averages_df <- averages_df %>%
+  slice(-91)
+
+reference <- averages_df$Chla
+observ <- chla_subset$Chla
+
+anom <- reference - observ
+
+anom <- data.frame(anom)
+
+ttt <- averages_df$t
+
+anomdf <- data.frame(anom = anom, t = ttt)
+
+anomdf$t <- factor(anomdf$t,
+                                levels = c(paste(1:31, 12:12, sep = "-"),
+                                           paste(1:31, 1:1, sep = "-"),
+                                           paste(1:29, 2:2, sep = "-")))
+
+# Create the ggplot with vertical labels
+ggplot(anomdf, aes(x = t, y = anom, group = 1)) +
+  geom_line(colour = "chartreuse4") +
+  geom_area()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red")+
+  labs(x="Date: Dec 2021 - Feb 2022", y="Chlorophyll a Concentration Anomaly")
+```

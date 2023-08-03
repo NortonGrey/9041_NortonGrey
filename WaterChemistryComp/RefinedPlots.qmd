@@ -1,0 +1,273 @@
+---
+title: "Refined plots"
+format: html
+---
+
+
+## Running Code
+
+Load packages
+
+```{r}
+library('tidyverse')
+library('ncdf4')
+library('heatwaveR')
+library('ggplot2')
+library('dplyr')
+```
+
+Load data downloaded from AODN
+
+```{r}
+data <- read.csv("IMOS_-_Combined_Biogeochemical_parameters_(reference_stations)-NRS_combined_biogeochemical_parameters.csv")
+
+```
+
+Filter data by locations
+
+```{r}
+Maria <- data[data$StationName == 'Maria Island', ]
+```
+
+We will focus on NRS data only, as coastal stations only measure the surface concentration of silicates. - Plot a line plot that records the concentration of nitrate wrt time on a given depth.
+- Coordinates of Maria Island NRS: Lat: -42.5 Lon: 148.4
+
+Separate the data by depth:
+
+```{r}
+# We are only interested in 20 and 80 metres depth data.
+Maria.list20 <- Maria[Maria$SampleDepth_m == 20, ]
+Maria.list80 <- Maria[Maria$SampleDepth_m >= 80, ]
+
+# Some of the data were collected beyond 80 metres but only up to 85 metres.
+for (SampleDepth_m in Maria.list80) {
+  Maria.list80$SampleDepth_m <- 80
+}
+```
+
+Setting up some date parameters for all the plots:
+
+```{r}
+# Overall Period of Plots
+start_date <- as.Date("2021-09-01")
+end_date <- as.Date("2023-01-01")
+# Highlight periods for the two heatwave events
+MHWstart<- as.Date("2022-01-16")
+MHWend <- as.Date("2022-08-16")
+MHWPeak1 <- as.Date("2022-05-23")
+MHW2start <- as.Date("2018-12-23")
+MHW2end <- as.Date("2019-02-18")
+MHWPeak2 <- as.Date("2019-01-18")
+
+#Special parameters for plots.
+x_scale <- "1 year"
+
+
+```
+
+We calculate the time-averaged values for silicate, dissolved oxygen, nitrate, nitrite, phosphate and salinity to add them to the dataframes.
+```{r}
+nutrients_data20 <- Maria.list20 %>%
+  summarize(across(c("Silicate_umolL", "Oxygen_umolL", "Nitrate_umolL", "Nitrite_umolL", "Phosphate_umolL", "Salinity"), ~mean(., na.rm = TRUE)), .groups = "drop")
+nutrients_data20 <- nutrients_data20 %>%
+  rename(Silicate_umolL_mean = Silicate_umolL,
+         Oxygen_umolL_mean = Oxygen_umolL,
+         Nitrate_umolL_mean = Nitrate_umolL,
+         Nitrite_umolL_mean = Nitrite_umolL,
+         Phosphate_umolL_mean = Phosphate_umolL,
+         Salinity_mean = Salinity)
+Silicate_umolL_mean20 <- nutrients_data20$Silicate_umolL_mean[1]
+Oxygen_umolL_mean20 <- nutrients_data20$Oxygen_umolL_mean[1]
+Nitrate_umolL_mean20 <- nutrients_data20$Nitrate_umolL_mean[1]
+Nitrite_umolL_mean20 <- nutrients_data20$Nitrite_umolL_mean[1]
+Phosphate_umolL_mean20 <- nutrients_data20$Phosphate_umolL_mean[1]
+Salinity_mean20 <- nutrients_data20$Salinity_mean[1]
+Maria.list20 <- Maria.list20 %>%
+  mutate(Silicate_umolL_anomaly = ifelse(is.na(Silicate_umolL), 0, Silicate_umolL - Silicate_umolL_mean20),
+         Oxygen_umolL_anomaly = ifelse(is.na(Oxygen_umolL), 0, Oxygen_umolL - Oxygen_umolL_mean20),
+         Nitrate_umolL_anomaly = ifelse(is.na(Nitrate_umolL), 0, Nitrate_umolL - Nitrate_umolL_mean20),
+         Nitrite_umolL_anomaly = ifelse(is.na(Nitrite_umolL), 0, Nitrite_umolL - Nitrite_umolL_mean20),
+         Phosphate_umolL_anomaly = ifelse(is.na(Phosphate_umolL), 0, Phosphate_umolL - Phosphate_umolL_mean20),
+         Salinity_anomaly = ifelse(is.na(Salinity), 0, Salinity - Salinity_mean20)) %>%
+  ungroup()
+
+nutrients_data80 <- Maria.list80 %>%
+  summarize(across(c("Silicate_umolL", "Oxygen_umolL", "Nitrate_umolL", "Nitrite_umolL", "Phosphate_umolL", "Salinity"), ~mean(., na.rm = TRUE)), .groups = "drop")
+nutrients_data80 <- nutrients_data80 %>%
+  rename(Silicate_umolL_mean = Silicate_umolL,
+         Oxygen_umolL_mean = Oxygen_umolL,
+         Nitrate_umolL_mean = Nitrate_umolL,
+         Nitrite_umolL_mean = Nitrite_umolL,
+         Phosphate_umolL_mean = Phosphate_umolL,
+         Salinity_mean = Salinity)
+Silicate_umolL_mean80 <- nutrients_data80$Silicate_umolL_mean[1]
+Oxygen_umolL_mean80 <- nutrients_data80$Oxygen_umolL_mean[1]
+Nitrate_umolL_mean80 <- nutrients_data80$Nitrate_umolL_mean[1]
+Nitrite_umolL_mean80 <- nutrients_data80$Nitrite_umolL_mean[1]
+Phosphate_umolL_mean80 <- nutrients_data80$Phosphate_umolL_mean[1]
+Salinity_mean80 <- nutrients_data80$Salinity_mean[1]
+Maria.list80 <- Maria.list80 %>%
+  mutate(Silicate_umolL_anomaly = ifelse(is.na(Silicate_umolL), 0, Silicate_umolL - Silicate_umolL_mean80),
+         Oxygen_umolL_anomaly = ifelse(is.na(Oxygen_umolL), 0, Oxygen_umolL - Oxygen_umolL_mean80),
+         Nitrate_umolL_anomaly = ifelse(is.na(Nitrate_umolL), 0, Nitrate_umolL - Nitrate_umolL_mean80),
+         Nitrite_umolL_anomaly = ifelse(is.na(Nitrite_umolL), 0, Nitrite_umolL - Nitrite_umolL_mean80),
+         Phosphate_umolL_anomaly = ifelse(is.na(Phosphate_umolL), 0, Phosphate_umolL - Phosphate_umolL_mean80),
+         Salinity_anomaly = ifelse(is.na(Salinity), 0, Salinity - Salinity_mean80)) %>%
+  ungroup()
+
+# This will be the dataframe we use for plotting
+Maria.mini <- rbind(Maria.list20, Maria.list80)
+Maria.mini$Date <- as.Date(Maria.mini$TripDate_UTC)
+
+```
+
+Dissolved Oxygen Trend:
+```{r}
+DOxyplotmini <- ggplot() +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.mini, aes(x = Date, y = Oxygen_umolL, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) + 
+  labs(title = "Dissolved Oxygen per Volume at Maria Island NRS by Depth (m)", y = "Dissolved Oxygen (Micromoles per Litre)") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(200, 300)) +
+  facet_wrap(~SampleDepth_m, nrow = 2, ncol = 1)
+ggsave(filename = "DOxy2080Plot.png", plot = DOxyplotmini, width = 6, height = 4, dpi = 300)
+print(DOxyplotmini)
+
+```
+Dissolved Oxygen Anomaly:
+```{r}
+DOxyANLmini <- ggplot(Maria.mini, aes(x = Date, y = Oxygen_umolL_anomaly, color = SampleDepth_m), na.rm = TRUE) +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", color = NA, alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_bar(stat = "identity", position = "dodge", color = NA) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) +
+  labs(x = "Time", y = "Dissolved Oxygen Anomaly (Micromoles per Litre)", title = "Dissolved Oxygen Anomaly Plot by Depth (m)") +
+  scale_y_continuous(limits = c(-40, 40)) +
+  facet_wrap(~ SampleDepth_m, nrow = 2) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+ggsave(filename = "DOxyANLminiPlot.png", plot = DOxyANLmini, width = 6, height = 4, dpi = 300)
+print(DOxyANLmini)
+```
+Silicate Trend:
+```{r}
+Silicateplotmini <- ggplot() +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.mini, aes(x = Date, y = Silicate_umolL, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) + 
+  labs(title = "Silicate (SiO"[4]~") per Volume at Maria Island NRS by Depth (m)", y = "SiO"[4]~ " (Micromoles per Litre)") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(0, 4)) +
+  facet_wrap(~SampleDepth_m, nrow = 2, ncol = 1)
+ggsave(filename = "Silicate2080Plot.png", plot = Silicateplotmini, width = 6, height = 4, dpi = 300)
+print(Silicateplotmini)
+
+```
+Silicate Anomaly:
+```{r}
+SiANLmini <- ggplot(Maria.mini, aes(x = Date, y = Silicate_umolL_anomaly, color = SampleDepth_m), na.rm = TRUE) +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", color = NA, alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_bar(stat = "identity", position = "dodge", color = NA) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) +
+  labs(x = "Time", y = "Silicate Anomaly (SiO"[4]~")", title = "Silicate Anomaly Plot by Depth (m)") +
+  scale_y_continuous(limits = c(-3, 3)) +
+  facet_wrap(~ SampleDepth_m, nrow = 2) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+ggsave(filename = "SilicateANLminiPlot.png", plot = SiANLmini, width = 6, height = 4, dpi = 300)
+print(SiANLmini)
+```
+Nitrate Trend:
+```{r}
+Nitrateplotmini <- ggplot() +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.mini, aes(x = Date, y = Nitrate_umolL, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) + 
+  labs(title = "Nitrate (NO"[3]~") per Volume at Maria Island NRS by Depth (m)", y = "NO"[3]~"  (Micromoles per Litre)") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(0, 11)) +
+  facet_wrap(~SampleDepth_m, nrow = 2, ncol = 1)
+ggsave(filename = "Nitrate2080Plot.png", plot = Nitrateplotmini, width = 6, height = 4, dpi = 300)
+print(Nitrateplotmini)
+
+```
+Nitrate Anomaly:
+```{r}
+NitrateANLmini <- ggplot(Maria.mini, aes(x = Date, y = Nitrate_umolL_anomaly, color = SampleDepth_m), na.rm = TRUE) +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", color = NA, alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_bar(stat = "identity", position = "dodge", color = NA) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) +
+  labs(x = "Time", y = "Nitrate Anomaly (NO"[3]~")", title = "Nitrate Anomaly Plot by Depth (m)") +
+  scale_y_continuous(limits = c(-3, 7.5)) +
+  facet_wrap(~ SampleDepth_m, nrow = 2) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+ggsave(filename = "NitrateANLminiPlot.png", plot = NitrateANLmini, width = 6, height = 4, dpi = 300)
+print(NitrateANLmini)
+```
+Nitrite Trend:
+```{r}
+Nitriteplotmini <- ggplot() +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.mini, aes(x = Date, y = Nitrite_umolL, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) + 
+  labs(title = "Nitrite (NO"[2]~") per Volume at Maria Island NRS by Depth (m)", y = "NO"[2]~"  (Micromoles per Litre)") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(0, 0.75)) +
+  facet_wrap(~SampleDepth_m, nrow = 2, ncol = 1)
+ggsave(filename = "Nitrite2080Plot.png", plot = Nitriteplotmini, width = 6, height = 4, dpi = 300)
+print(Nitriteplotmini)
+
+```
+Nitrite Anomaly:
+```{r}
+NitriteANLmini <- ggplot(Maria.mini, aes(x = Date, y = Nitrite_umolL_anomaly, color = SampleDepth_m), na.rm = TRUE) +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", color = NA, alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_bar(stat = "identity", position = "dodge", color = NA) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) +
+  labs(x = "Time", y = "Nitrite Anomaly (NO"[2]~")", title = "Nitrite Anomaly Plot by Depth (m)") +
+  scale_y_continuous(limits = c(-0.3, 0.4)) +
+  facet_wrap(~ SampleDepth_m, nrow = 2) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+ggsave(filename = "NitriteANLminiPlot.png", plot = NitriteANLmini, width = 6, height = 4, dpi = 300)
+print(NitriteANLmini)
+```
+Phosphate Trend:
+```{r}
+Phosphateplotmini <- ggplot() +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_line(data = Maria.mini, aes(x = Date, y = Phosphate_umolL, group = 1), na.rm = TRUE) +
+  scale_color_manual(values = palette()) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) + 
+  labs(title = "Phosphate (PO"[4]~") per Volume at Maria Island NRS by Depth (m)", y = "PO"[4]~ "(Micromoles per Litre)") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(limits = c(0, 1)) +
+  facet_wrap(~SampleDepth_m, nrow = 2, ncol = 1)
+ggsave(filename = "Phosphate2080Plot.png", plot = Phosphateplotmini, width = 6, height = 4, dpi = 300)
+print(Phosphateplotmini)
+
+```
+Phosphate Anomaly:
+```{r}
+PhosphateANLmini <- ggplot(Maria.mini, aes(x = Date, y = Phosphate_umolL_anomaly, color = SampleDepth_m), na.rm = TRUE) +
+  geom_rect(data = Maria.mini, aes(xmin = MHWstart, xmax = MHWend, ymin = -Inf, ymax = Inf), fill = "pink", color = NA, alpha = 0.1) +
+  geom_vline(xintercept = MHWPeak1, linetype = "dashed", color = "red") +
+  geom_bar(stat = "identity", position = "dodge", color = NA) +
+  scale_x_date(date_labels = "%Y-%m", date_breaks = x_scale, limits = c(start_date, end_date)) +
+  labs(x = "Time", y = "Phosphate Anomaly (PO"[4]~")", title = "Phosphate Anomaly Plot by Depth (m)") +
+  scale_y_continuous(limits = c(-0.2, 0.5)) +
+  facet_wrap(~ SampleDepth_m, nrow = 2) +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "none")
+ggsave(filename = "PhosphateANLminiPlot.png", plot = PhosphateANLmini, width = 6, height = 4, dpi = 300)
+print(PhosphateANLmini)
+```
