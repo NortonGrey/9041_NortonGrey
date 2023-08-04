@@ -2,8 +2,8 @@
 Metadata and code for submission to BEES9041 final report assessment. Created by Norton Grey 5493084.
 
 Raw temperature and biological data too large to fit within GitHub repository, uploaded to OneDrive:
-- Physical data:
-- Biological data:
+- Physical data: https://unsw-my.sharepoint.com/:f:/g/personal/z5493084_ad_unsw_edu_au/EsTy-D-ajgVJlzuOYMLiRIkBoMkyvhI-Z8tUenLdzRcjRw?e=2j2q00
+- Biological data: https://unsw-my.sharepoint.com/personal/z5452002_ad_unsw_edu_au/_layouts/15/onedrive.aspx?e=5%3A3f49b5fd3982471f9b0b11295c1b1294&at=9&cid=9acd33ea%2D7e51%2D47e5%2D8445%2D92d6114c7723&id=%2Fpersonal%2Fz5452002%5Fad%5Funsw%5Fedu%5Fau%2FDocuments%2Fbiological%20data&FolderCTID=0x01200059EFD3CFA3229C45ACF353DC126B2879&view=0
 
 'Data' folder contains Biogeochemical dataset from Maria Island National Reference Station (‘IMOS – combined geochemical parameters (reference stations)) which was used for the water chemistry component as outlined in the report methods.
 
